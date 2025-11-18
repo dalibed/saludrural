@@ -1,0 +1,21 @@
+from django.db import models
+
+class Medico(models.Model):
+    id_medico = models.AutoField(db_column='ID_Medico', primary_key=True)
+    id_usuario = models.IntegerField(db_column='ID_Usuario', unique=True)
+    licencia = models.CharField(db_column='Licencia', max_length=50, null=True)
+    anios_experiencia = models.IntegerField(db_column='AniosExperiencia', null=True)
+    descripcion_perfil = models.TextField(db_column='DescripcionPerfil', null=True)
+    foto = models.CharField(db_column='Foto', max_length=200, null=True)
+    email = models.CharField(db_column='Email', max_length=100, null=True)
+    vereda = models.CharField(db_column='Vereda', max_length=100, null=True)
+    estado_validacion = models.CharField(
+        db_column='EstadoValidacion', 
+        max_length=20
+    )
+
+    class Meta:
+        managed = False
+        db_table = 'medico'
+
+

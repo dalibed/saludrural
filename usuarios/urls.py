@@ -1,0 +1,10 @@
+from django.urls import path
+from rest_framework.routers import DefaultRouter
+from .views import UsuarioViewSet
+
+router = DefaultRouter()
+router.register(r'usuarios', UsuarioViewSet, basename='usuarios')
+
+urlpatterns = router.urls + [
+    path('usuarios/<int:pk>/activar/', UsuarioViewSet.as_view({'post': 'activate'})),
+]
