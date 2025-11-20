@@ -37,4 +37,5 @@ urlpatterns = [
     path('api/', include('videollamada.urls')),
     path('api/', include('especialidad.urls')),
     path('api/', include('notificaciones.urls')),
+    path('api/', include('autenticacion.urls')),
 ]
