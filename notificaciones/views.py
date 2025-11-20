@@ -137,7 +137,7 @@ class NotificacionViewSet(viewsets.ViewSet):
                 medico = Medico.objects.get(id_usuario=request.user.id_usuario)
                 
                 # Verificar que esté consultando sus propias notificaciones
-                if medico.id_usuario.id_usuario != id_usuario_medico:
+                if medico.id_usuario != id_usuario_medico:
                     return Response(
                         {
                             "detail": "No tienes permiso para ver las notificaciones de otros médicos.",
