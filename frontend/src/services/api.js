@@ -51,7 +51,10 @@ api.interceptors.response.use(
         // Si falla el refresh, limpiar tokens y redirigir al login
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
-        window.location.href = '/login';
+        // Solo redirigir si no estamos ya en la página de login
+        if (!window.location.pathname.includes('/login')) {
+          window.location.href = '/login';
+        }
         return Promise.reject(refreshError);
       }
     }
@@ -69,11 +72,15 @@ export const authService = {
 
   logout: async () => {
     try {
-      await api.post('/auth/logout/', {
-        refresh_token: localStorage.getItem('refresh_token'),
-      });
+      const refreshToken = localStorage.getItem('refresh_token');
+      if (refreshToken) {
+        await api.post('/auth/logout/', {
+          refresh: refreshToken,
+        });
+      }
     } catch (error) {
       console.error('Error al hacer logout:', error);
+      // Continuar limpiando tokens incluso si hay error
     } finally {
       localStorage.removeItem('access_token');
       localStorage.removeItem('refresh_token');

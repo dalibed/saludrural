@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { LogIn, Mail, Lock } from 'lucide-react';
@@ -8,8 +8,15 @@ const Login = () => {
   const [contrasena, setContrasena] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+
+  // Si ya está autenticado, redirigir al dashboard
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -17,15 +24,24 @@ const Login = () => {
     setLoading(true);
 
     try {
+      console.log('Iniciando login...');
       const result = await login(correo, contrasena);
+      console.log('Resultado del login:', result);
+      
       if (result.success) {
-        navigate('/dashboard');
+        console.log('Login exitoso, redirigiendo...');
+        // Esperar un momento para que el estado se actualice
+        setTimeout(() => {
+          navigate('/dashboard', { replace: true });
+        }, 100);
       } else {
+        console.error('Error en login:', result.error);
         setError(result.error || 'Error al iniciar sesión');
+        setLoading(false);
       }
     } catch (err) {
+      console.error('Excepción en handleSubmit:', err);
       setError('Error al iniciar sesión. Por favor, verifica tus credenciales.');
-    } finally {
       setLoading(false);
     }
   };
@@ -47,7 +63,8 @@ const Login = () => {
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-                {error}
+                <p className="font-medium">Error</p>
+                <p className="text-sm">{error}</p>
               </div>
             )}
 
@@ -64,6 +81,7 @@ const Login = () => {
                   className="input pl-10"
                   placeholder="usuario@ejemplo.com"
                   required
+                  disabled={loading}
                 />
               </div>
             </div>
@@ -81,6 +99,7 @@ const Login = () => {
                   className="input pl-10"
                   placeholder="••••••••"
                   required
+                  disabled={loading}
                 />
               </div>
             </div>
@@ -88,9 +107,16 @@ const Login = () => {
             <button
               type="submit"
               disabled={loading}
-              className="btn btn-primary w-full py-3 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn btn-primary w-full py-3 text-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
             >
-              {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
+              {loading ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                  <span>Iniciando sesión...</span>
+                </>
+              ) : (
+                'Iniciar Sesión'
+              )}
             </button>
           </form>
         </div>

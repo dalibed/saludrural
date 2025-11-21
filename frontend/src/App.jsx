@@ -15,13 +15,20 @@ const ProtectedRoute = ({ children }) => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Cargando...</p>
+        </div>
       </div>
     );
   }
 
-  return isAuthenticated ? children : <Navigate to="/login" />;
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return children;
 };
 
 // Componente para rutas públicas (redirige al dashboard si ya está autenticado)
@@ -30,13 +37,20 @@ const PublicRoute = ({ children }) => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Cargando...</p>
+        </div>
       </div>
     );
   }
 
-  return isAuthenticated ? <Navigate to="/dashboard" /> : children;
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return children;
 };
 
 function AppRoutes() {
@@ -52,7 +66,7 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<Navigate to="/dashboard" />} />
+        <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="citas" element={<Citas />} />
         <Route path="pacientes" element={<Pacientes />} />
@@ -60,7 +74,7 @@ function AppRoutes() {
         <Route path="perfil" element={<Perfil />} />
       </Route>
 
-      <Route path="*" element={<Navigate to="/dashboard" />} />
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
 }

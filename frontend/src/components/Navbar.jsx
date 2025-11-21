@@ -8,8 +8,14 @@ const Navbar = () => {
   const navigate = useNavigate();
 
   const handleLogout = async () => {
-    await logout();
-    navigate('/login');
+    try {
+      await logout();
+      navigate('/login', { replace: true });
+    } catch (error) {
+      console.error('Error al cerrar sesión:', error);
+      // Aun así, redirigir al login
+      navigate('/login', { replace: true });
+    }
   };
 
   return (
