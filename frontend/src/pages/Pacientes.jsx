@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 import { pacienteService } from '../services/api';
-import { Users, Plus, Edit, Trash2, User } from 'lucide-react';
+import { Users, Plus, Edit, Trash2, User, AlertCircle } from 'lucide-react';
 
 const Pacientes = () => {
+  const { user } = useAuth();
   const [pacientes, setPacientes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -16,12 +18,21 @@ const Pacientes = () => {
   });
 
   useEffect(() => {
-    loadPacientes();
-  }, []);
+    if (user) {
+      loadPacientes();
+    }
+  }, [user]);
 
   const loadPacientes = async () => {
     try {
       setLoading(true);
+      
+      // Solo administradores pueden ver todos los pacientes
+      if (user?.rol !== 'Administrador') {
+        setPacientes([]);
+        return;
+      }
+      
       const data = await pacienteService.getAll();
       
       // Asegurar que data es un array
@@ -33,10 +44,6 @@ const Pacientes = () => {
       }
     } catch (error) {
       console.error('Error al cargar pacientes:', error);
-      // Si es error 403, mostrar mensaje apropiado
-      if (error.response?.status === 403) {
-        console.warn('No tienes permisos para ver todos los pacientes. Solo administradores pueden ver la lista completa.');
-      }
       setPacientes([]);
     } finally {
       setLoading(false);
@@ -95,6 +102,30 @@ const Pacientes = () => {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      </div>
+    );
+  }
+
+  // Si no es administrador, mostrar mensaje de acceso restringido
+  if (user?.rol !== 'Administrador') {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Pacientes</h1>
+          <p className="text-gray-600">Gestiona la información de los pacientes</p>
+        </div>
+        <div className="card">
+          <div className="flex items-center space-x-4 p-6 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <AlertCircle className="w-8 h-8 text-yellow-600 flex-shrink-0" />
+            <div>
+              <h3 className="font-bold text-yellow-900 mb-1">Acceso Restringido</h3>
+              <p className="text-yellow-700">
+                Solo los administradores pueden ver la lista completa de pacientes.
+                Si necesitas ver tu información, consulta tu perfil.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

@@ -53,17 +53,28 @@ const Citas = () => {
         citasData = [];
       }
       
-      // Cargar pacientes y médicos (solo para crear citas, requiere permisos específicos)
-      const [pacientesData, medicosData] = await Promise.all([
-        pacienteService.getAll().catch(err => {
-          console.warn('Error al cargar pacientes (puede requerir permisos de admin):', err);
-          return [];
-        }),
-        medicoService.getAll().catch(err => {
-          console.warn('Error al cargar médicos:', err);
-          return [];
-        }),
-      ]);
+      // Cargar pacientes y médicos solo si el usuario tiene permisos
+      // Pacientes solo pueden cargarse si es admin
+      // Médicos pueden cargarse por todos
+      let pacientesData = [];
+      if (user?.rol === 'Administrador') {
+        try {
+          pacientesData = await pacienteService.getAll();
+          pacientesData = Array.isArray(pacientesData) ? pacientesData : [];
+        } catch (err) {
+          console.warn('Error al cargar pacientes:', err);
+          pacientesData = [];
+        }
+      }
+      
+      let medicosData = [];
+      try {
+        medicosData = await medicoService.getAll();
+        medicosData = Array.isArray(medicosData) ? medicosData : [];
+      } catch (err) {
+        console.warn('Error al cargar médicos:', err);
+        medicosData = [];
+      }
 
       setCitas(Array.isArray(citasData) ? citasData : []);
       setPacientes(Array.isArray(pacientesData) ? pacientesData : []);

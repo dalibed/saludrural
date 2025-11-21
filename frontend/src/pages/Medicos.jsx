@@ -20,7 +20,8 @@ const Medicos = () => {
       } else {
         data = await medicoService.getByEstado(filterEstado);
       }
-      setMedicos(data);
+      // Asegurar que data es un array
+      setMedicos(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Error al cargar médicos:', error);
     } finally {
