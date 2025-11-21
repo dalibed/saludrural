@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { LogIn, Mail, Lock } from 'lucide-react';
 
 const Login = () => {
@@ -14,7 +14,7 @@ const Login = () => {
   // Si ya está autenticado, redirigir al dashboard
   useEffect(() => {
     if (isAuthenticated) {
-      navigate('/dashboard', { replace: true });
+      navigate('/app/dashboard', { replace: true });
     }
   }, [isAuthenticated, navigate]);
 
@@ -32,7 +32,7 @@ const Login = () => {
         console.log('Login exitoso, redirigiendo...');
         // Esperar un momento para que el estado se actualice
         setTimeout(() => {
-          navigate('/dashboard', { replace: true });
+          navigate('/app/dashboard', { replace: true });
         }, 100);
       } else {
         console.error('Error en login:', result.error);
@@ -119,6 +119,13 @@ const Login = () => {
               )}
             </button>
           </form>
+
+          <p className="text-center text-sm text-gray-500 mt-6">
+            ¿No tienes cuenta?{' '}
+            <Link to="/register" className="text-primary-600 font-semibold">
+              Regístrate aquí
+            </Link>
+          </p>
         </div>
       </div>
     </div>

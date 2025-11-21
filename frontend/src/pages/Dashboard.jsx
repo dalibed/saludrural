@@ -1,6 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { citaService, pacienteService, medicoService } from '../services/api';
+import DoctorCard from '../components/DoctorCard';
+import DoctorProfileModal from '../components/DoctorProfileModal';
+import BookAppointmentModal from '../components/BookAppointmentModal';
 import {
   Calendar,
   Users,
@@ -11,6 +15,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { normalizeDoctor } from '../utils/doctor';
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -21,6 +26,9 @@ const Dashboard = () => {
     medicos: 0,
   });
   const [proximasCitas, setProximasCitas] = useState([]);
+  const [medicosDestacados, setMedicosDestacados] = useState([]);
+  const [selectedDoctor, setSelectedDoctor] = useState(null);
+  const [bookingDoctor, setBookingDoctor] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -30,98 +38,56 @@ const Dashboard = () => {
   }, [user]);
 
   const loadDashboardData = async () => {
+    if (!user) return;
+
     try {
       setLoading(true);
-      
-      // Cargar datos según el rol del usuario
-      const promises = [];
+
       let citas = [];
-      let pacientes = 0;
-      let medicos = 0;
-      
-      // Obtener citas según el rol
-      if (user?.rol === 'Paciente') {
-        promises.push(
-          citaService.getByPaciente(user.id_usuario).catch(err => {
-            console.warn('Error al cargar citas del paciente:', err);
-            return [];
-          })
-        );
-      } else if (user?.rol === 'Medico') {
-        promises.push(
-          citaService.getByMedico(user.id_usuario).catch(err => {
-            console.warn('Error al cargar citas del médico:', err);
-            return [];
-          })
-        );
-      } else {
-        // Admin - intentar obtener todas (puede no estar disponible)
-        promises.push(
-          citaService.getAll().catch(err => {
-            console.warn('Error al cargar todas las citas:', err);
-            return [];
-          })
-        );
+      if (user?.rol === 'Paciente' && user?.id_usuario) {
+        citas = await citaService.getByPaciente(user.id_usuario);
+      } else if (user?.rol === 'Medico' && user?.id_usuario) {
+        citas = await citaService.getByMedico(user.id_usuario);
       }
-      
-      // Obtener pacientes (solo admin)
+
+      let pacientesData = [];
       if (user?.rol === 'Administrador') {
-        promises.push(
-          pacienteService.getAll().then(data => Array.isArray(data) ? data : []).catch(err => {
-            console.warn('Error al cargar pacientes (solo admin):', err);
-            return [];
-          })
-        );
-      } else {
-        promises.push(Promise.resolve([]));
+        pacientesData = await pacienteService.getAll().catch(() => []);
       }
-      
-      // Obtener médicos
-      promises.push(
-        medicoService.getAll().then(data => Array.isArray(data) ? data : []).catch(err => {
-          console.warn('Error al cargar médicos:', err);
-          return [];
-        })
-      );
-      
-      const results = await Promise.all(promises);
-      citas = Array.isArray(results[0]) ? results[0] : [];
-      const pacientesData = Array.isArray(results[1]) ? results[1] : [];
-      const medicosData = Array.isArray(results[2]) ? results[2] : [];
+
+      const medicosData =
+        user?.rol === 'Administrador'
+          ? await medicoService.getAll().catch(() => [])
+          : await medicoService.getByEstado('Aprobado').catch(() => []);
+      const normalizedMedicos = Array.isArray(medicosData) ? medicosData.map(normalizeDoctor) : [];
+      setMedicosDestacados(normalizedMedicos.slice(0, 3));
 
       const hoy = new Date().toISOString().split('T')[0];
-      const citasHoy = citas.filter((cita) => cita.fecha === hoy);
+      const citasHoy = citas.filter((cita) => {
+        const fecha = cita.fecha || cita.Fecha;
+        if (!fecha) return false;
+        return new Date(fecha).toISOString().split('T')[0] === hoy;
+      });
+
       const citasPendientes = citas.filter(
-        (cita) => cita.estado === 'Programada'
+        (cita) => (cita.estado || cita.Estado) === 'Programada'
       );
 
-      // Obtener próximas citas (próximas 5)
       const proximas = citas
         .filter((cita) => {
-          if (!cita.fecha) return false;
-          try {
-            const citaFecha = new Date(cita.fecha);
-            return citaFecha >= new Date();
-          } catch {
-            return false;
-          }
+          const fecha = cita.fecha || cita.Fecha;
+          if (!fecha) return false;
+          return new Date(fecha) >= new Date();
         })
-        .sort((a, b) => {
-          try {
-            return new Date(a.fecha) - new Date(b.fecha);
-          } catch {
-            return 0;
-          }
-        })
+        .sort((a, b) => new Date(a.fecha || a.Fecha) - new Date(b.fecha || b.Fecha))
         .slice(0, 5);
 
       setStats({
         citasHoy: citasHoy.length,
         citasPendientes: citasPendientes.length,
-        pacientes: pacientesData.length,
-        medicos: medicosData.length,
+        pacientes: Array.isArray(pacientesData) ? pacientesData.length : 0,
+        medicos: normalizedMedicos.length,
       });
-
       setProximasCitas(proximas);
     } catch (error) {
       console.error('Error al cargar datos del dashboard:', error);
@@ -151,19 +117,23 @@ const Dashboard = () => {
       icon: Clock,
       color: 'bg-yellow-500',
     },
-    {
+  ];
+
+  if (user?.rol === 'Administrador') {
+    statCards.push({
       title: 'Pacientes',
       value: stats.pacientes,
       icon: Users,
       color: 'bg-green-500',
-    },
-    {
-      title: 'Médicos',
-      value: stats.medicos,
-      icon: Stethoscope,
-      color: 'bg-purple-500',
-    },
-  ];
+    });
+  }
+
+  statCards.push({
+    title: user?.rol === 'Paciente' ? 'Médicos validados' : 'Médicos',
+    value: stats.medicos,
+    icon: Stethoscope,
+    color: 'bg-purple-500',
+  });
 
   return (
     <div className="space-y-6">
@@ -195,6 +165,27 @@ const Dashboard = () => {
         ))}
       </div>
 
+      {user?.rol === 'Paciente' && medicosDestacados.length > 0 && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-gray-900">Médicos aprobados para ti</h2>
+            <Link to="/medicos" className="text-sm font-semibold text-primary-600">
+              Ver todos
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {medicosDestacados.map((medico) => (
+              <DoctorCard
+                key={medico.id || medico.usuarioId}
+                doctor={medico}
+                onViewProfile={setSelectedDoctor}
+                onBook={setBookingDoctor}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Próximas Citas */}
       <div className="card">
         <h2 className="text-xl font-bold text-gray-900 mb-4">
@@ -202,36 +193,47 @@ const Dashboard = () => {
         </h2>
         {proximasCitas.length > 0 ? (
           <div className="space-y-3">
-            {proximasCitas.map((cita) => (
-              <div
-                key={cita.id_cita}
-                className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                <div className="flex-1">
-                  <p className="font-medium text-gray-900">
-                    {cita.paciente_nombre || 'Paciente'}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    {cita.medico_nombre || 'Médico'}
-                  </p>
+            {proximasCitas.map((cita) => {
+              const idCita = cita.id_cita || cita.ID_Cita;
+              const pacienteNombre = cita.paciente_nombre || cita.PacienteNombre || cita.nombre_paciente || 'Paciente';
+              const medicoNombre = cita.medico_nombre || cita.MedicoNombre || cita.nombre_medico || 'Médico';
+              const fecha = cita.fecha || cita.Fecha;
+              const hora = cita.hora || cita.Hora;
+              const estado = cita.estado || cita.Estado;
+              
+              return (
+                <div
+                  key={idCita}
+                  className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                >
+                  <div className="flex-1">
+                    <p className="font-medium text-gray-900">
+                      {user?.rol === 'Paciente' ? medicoNombre : pacienteNombre}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      {user?.rol === 'Paciente' ? 'Consulta médica' : 'Paciente'}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-medium text-gray-900">
+                      {fecha ? format(new Date(fecha), 'dd MMM yyyy', {
+                        locale: es,
+                      }) : '-'}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      {hora ? (typeof hora === 'string' ? hora : hora.toString().substring(0, 5)) : '-'}
+                    </p>
+                  </div>
+                  <div className="ml-4">
+                    {estado === 'Programada' ? (
+                      <CheckCircle className="w-5 h-5 text-green-500" />
+                    ) : (
+                      <XCircle className="w-5 h-5 text-red-500" />
+                    )}
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="font-medium text-gray-900">
-                    {format(new Date(cita.fecha), 'dd MMM yyyy', {
-                      locale: es,
-                    })}
-                  </p>
-                  <p className="text-sm text-gray-600">{cita.hora}</p>
-                </div>
-                <div className="ml-4">
-                  {cita.estado === 'Programada' ? (
-                    <CheckCircle className="w-5 h-5 text-green-500" />
-                  ) : (
-                    <XCircle className="w-5 h-5 text-red-500" />
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <p className="text-gray-500 text-center py-8">
@@ -239,6 +241,17 @@ const Dashboard = () => {
           </p>
         )}
       </div>
+
+      {selectedDoctor && (
+        <DoctorProfileModal doctor={selectedDoctor} onClose={() => setSelectedDoctor(null)} />
+      )}
+      {bookingDoctor && (
+        <BookAppointmentModal
+          doctor={bookingDoctor}
+          onClose={() => setBookingDoctor(null)}
+          onSuccess={() => setBookingDoctor(null)}
+        />
+      )}
     </div>
   );
 };

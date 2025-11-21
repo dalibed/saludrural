@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { citaService, pacienteService, medicoService, agendaService } from '../services/api';
-import { Calendar, Plus, X, CheckCircle, Clock } from 'lucide-react';
+import { citaService, pacienteService, medicoService, videollamadaService } from '../services/api';
+import { Calendar, Plus, X, CheckCircle, Clock, Video } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -12,13 +12,12 @@ const Citas = () => {
   const [medicos, setMedicos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [alert, setAlert] = useState({ type: '', text: '' });
   const [formData, setFormData] = useState({
-    id_paciente: '',
-    id_medico: '',
+    id_usuario_paciente: '',
+    id_usuario_medico: '',
     id_agenda: '',
-    fecha: '',
-    hora: '',
-    motivo: '',
+    motivo_consulta: '',
   });
 
   useEffect(() => {
@@ -28,52 +27,44 @@ const Citas = () => {
   }, [user]);
 
   const loadData = async () => {
+    if (!user) return;
+    
     try {
       setLoading(true);
       
-      // Cargar citas según el rol del usuario
       let citasData = [];
-      
       if (user?.rol === 'Paciente' && user?.id_usuario) {
         try {
           citasData = await citaService.getByPaciente(user.id_usuario);
         } catch (err) {
           console.warn('Error al cargar citas del paciente:', err);
-          citasData = [];
         }
       } else if (user?.rol === 'Medico' && user?.id_usuario) {
         try {
           citasData = await citaService.getByMedico(user.id_usuario);
         } catch (err) {
           console.warn('Error al cargar citas del médico:', err);
-          citasData = [];
         }
-      } else {
-        // Administrador o usuario sin rol específico - no hay endpoint para todas las citas
+      } else if (user?.rol === 'Administrador') {
         citasData = [];
       }
-      
-      // Cargar pacientes y médicos solo si el usuario tiene permisos
-      // Pacientes solo pueden cargarse si es admin
-      // Médicos pueden cargarse por todos
+
       let pacientesData = [];
       if (user?.rol === 'Administrador') {
         try {
-          pacientesData = await pacienteService.getAll();
-          pacientesData = Array.isArray(pacientesData) ? pacientesData : [];
+          const response = await pacienteService.getAll();
+          pacientesData = Array.isArray(response) ? response : [];
         } catch (err) {
-          console.warn('Error al cargar pacientes:', err);
-          pacientesData = [];
+          console.warn('Error al cargar pacientes (solo admin):', err);
         }
       }
-      
+
       let medicosData = [];
       try {
-        medicosData = await medicoService.getAll();
-        medicosData = Array.isArray(medicosData) ? medicosData : [];
+        const response = await medicoService.getAll();
+        medicosData = Array.isArray(response) ? response : [];
       } catch (err) {
         console.warn('Error al cargar médicos:', err);
-        medicosData = [];
       }
 
       setCitas(Array.isArray(citasData) ? citasData : []);
@@ -81,6 +72,10 @@ const Citas = () => {
       setMedicos(Array.isArray(medicosData) ? medicosData : []);
     } catch (error) {
       console.error('Error al cargar datos:', error);
+      setAlert({
+        type: 'error',
+        text: 'Error al cargar las citas. Por favor, intenta nuevamente.',
+      });
     } finally {
       setLoading(false);
     }
@@ -88,43 +83,103 @@ const Citas = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!user) return;
+    
     try {
-      await citaService.create(formData);
+      // Si es paciente, usar su propio ID
+      const dataToSend = {
+        ...formData,
+        id_usuario_paciente: user.rol === 'Paciente' ? user.id_usuario : formData.id_usuario_paciente,
+      };
+      
+      await citaService.create(dataToSend);
       setShowModal(false);
       setFormData({
-        id_paciente: '',
-        id_medico: '',
+        id_usuario_paciente: '',
+        id_usuario_medico: '',
         id_agenda: '',
-        fecha: '',
-        hora: '',
-        motivo: '',
+        motivo_consulta: '',
+      });
+      setAlert({
+        type: 'success',
+        text: 'Tu cita fue creada exitosamente.',
       });
       loadData();
     } catch (error) {
       console.error('Error al crear cita:', error);
-      alert('Error al crear la cita. Por favor, intenta nuevamente.');
+      const errorMessage = error.response?.data?.detail || 'Error al crear la cita. Por favor, intenta nuevamente.';
+      setAlert({ type: 'error', text: errorMessage });
     }
   };
 
   const handleCancelar = async (id) => {
+    if (!user) return;
+    
     if (window.confirm('¿Estás seguro de cancelar esta cita?')) {
       try {
-        await citaService.cancelar(id);
+        await citaService.cancelar(id, {
+          id_usuario: user.id_usuario,
+          motivo_cancelacion: 'Cancelado por el usuario',
+        });
         loadData();
       } catch (error) {
         console.error('Error al cancelar cita:', error);
-        alert('Error al cancelar la cita.');
+        const errorMessage = error.response?.data?.detail || 'Error al cancelar la cita.';
+        setAlert({ type: 'error', text: errorMessage });
       }
     }
   };
 
   const handleCompletar = async (id) => {
+    if (!user) return;
+    
     try {
-      await citaService.completar(id);
+      await citaService.completar(id, {
+        id_usuario_medico: user.id_usuario,
+      });
+      setAlert({
+        type: 'success',
+        text: 'La cita se marcó como atendida.',
+      });
       loadData();
     } catch (error) {
       console.error('Error al completar cita:', error);
-      alert('Error al completar la cita.');
+      const errorMessage = error.response?.data?.detail || 'Error al completar la cita.';
+      setAlert({ type: 'error', text: errorMessage });
+    }
+  };
+
+  const handleVerVideollamada = async (id) => {
+    try {
+      const data = await videollamadaService.getByCita(id);
+      const enlace = data?.enlace || data?.Enlace;
+      if (enlace) {
+        window.open(enlace, '_blank', 'noopener');
+      } else {
+        alert('El médico aún no configura un enlace de videollamada para esta cita.');
+      }
+    } catch (error) {
+      console.error('Error al obtener videollamada:', error);
+      const errorMessage =
+        error.response?.data?.detail ||
+        'No pudimos recuperar el enlace de la videollamada. Intenta nuevamente.';
+      alert(errorMessage);
+    }
+  };
+
+  const handleConfigurarVideollamada = async (id) => {
+    const enlace = window.prompt('Ingresa el enlace de la videollamada (Zoom, Meet, etc.)');
+    if (!enlace) return;
+
+    try {
+      await videollamadaService.crear(id, { enlace });
+      alert('Videollamada configurada correctamente.');
+    } catch (error) {
+      console.error('Error al configurar videollamada:', error);
+      const errorMessage =
+        error.response?.data?.detail ||
+        'No pudimos guardar el enlace. Verifica que seas el médico de la cita.';
+      alert(errorMessage);
     }
   };
 
@@ -156,14 +211,28 @@ const Citas = () => {
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Citas</h1>
           <p className="text-gray-600">Gestiona todas las citas médicas</p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="btn btn-primary flex items-center space-x-2"
-        >
-          <Plus className="w-5 h-5" />
-          <span>Nueva Cita</span>
-        </button>
+        {user?.rol === 'Paciente' && (
+          <button
+            onClick={() => setShowModal(true)}
+            className="btn btn-primary flex items-center space-x-2"
+          >
+            <Plus className="w-5 h-5" />
+            <span>Nueva Cita</span>
+          </button>
+        )}
       </div>
+
+      {alert.text && (
+        <div
+          className={`rounded-2xl px-4 py-3 text-sm font-medium ${
+            alert.type === 'success'
+              ? 'bg-green-50 text-green-700 border border-green-200'
+              : 'bg-red-50 text-red-700 border border-red-200'
+          }`}
+        >
+          {alert.text}
+        </div>
+      )}
 
       {/* Tabla de Citas */}
       <div className="card overflow-x-auto">
@@ -192,57 +261,90 @@ const Citas = () => {
           </thead>
           <tbody className="divide-y divide-gray-200">
             {citas.length > 0 ? (
-              citas.map((cita) => (
-                <tr key={cita.id_cita} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-sm text-gray-900">
-                    {cita.paciente_nombre || `Paciente #${cita.id_paciente}`}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-900">
-                    {cita.medico_nombre || `Médico #${cita.id_medico}`}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-900">
-                    {cita.fecha
-                      ? format(new Date(cita.fecha), 'dd MMM yyyy', {
-                          locale: es,
-                        })
-                      : '-'}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-900">
-                    {cita.hora || '-'}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`px-2 py-1 text-xs font-medium rounded-full ${getEstadoColor(
-                        cita.estado
-                      )}`}
-                    >
-                      {cita.estado || 'Pendiente'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center space-x-2">
-                      {cita.estado === 'Programada' && (
-                        <>
+              citas.map((cita) => {
+                // Manejar diferentes nombres de campos que pueden venir del stored procedure
+                const idCita = cita.id_cita || cita.ID_Cita;
+                const pacienteNombre = cita.paciente_nombre || cita.PacienteNombre || cita.nombre_paciente || `Paciente #${cita.id_paciente || cita.ID_Paciente || 'N/A'}`;
+                const medicoNombre = cita.medico_nombre || cita.MedicoNombre || cita.nombre_medico || `Médico #${cita.id_medico || cita.ID_Medico || 'N/A'}`;
+                const fecha = cita.fecha || cita.Fecha;
+                const hora = cita.hora || cita.Hora;
+                const estado = cita.estado || cita.Estado || 'Pendiente';
+                const motivo = cita.motivo_consulta || cita.MotivoConsulta || '';
+                
+                return (
+                  <tr key={idCita} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-sm text-gray-900">
+                      <div className="flex flex-col">
+                        <span className="font-medium text-dark-700">{pacienteNombre}</span>
+                        {motivo && <span className="text-xs text-dark-400">Motivo: {motivo}</span>}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-900">
+                      {medicoNombre}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-900">
+                      {fecha
+                        ? format(new Date(fecha), 'dd MMM yyyy', {
+                            locale: es,
+                          })
+                        : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-900">
+                      {hora ? (typeof hora === 'string' ? hora : hora.toString().substring(0, 5)) : '-'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`px-2 py-1 text-xs font-medium rounded-full ${getEstadoColor(
+                          estado
+                        )}`}
+                      >
+                        {estado}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center space-x-2">
+                        {estado === 'Programada' && user?.rol === 'Paciente' && (
                           <button
-                            onClick={() => handleCompletar(cita.id_cita)}
+                            onClick={() => handleVerVideollamada(idCita)}
+                            className="p-2 text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                            title="Ver videollamada"
+                          >
+                            <Video className="w-5 h-5" />
+                          </button>
+                        )}
+                        {estado === 'Programada' && user?.rol === 'Medico' && (
+                          <button
+                            onClick={() => handleConfigurarVideollamada(idCita)}
+                            className="p-2 text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                            title="Configurar videollamada"
+                          >
+                            <Video className="w-5 h-5" />
+                          </button>
+                        )}
+                        {estado === 'Programada' && user?.rol === 'Medico' && (
+                          <button
+                            onClick={() => handleCompletar(idCita)}
                             className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                            title="Completar"
+                            title="Marcar como atendida"
                           >
                             <CheckCircle className="w-5 h-5" />
                           </button>
-                          <button
-                            onClick={() => handleCancelar(cita.id_cita)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Cancelar"
-                          >
-                            <X className="w-5 h-5" />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))
+                        )}
+                        {estado === 'Programada' &&
+                          (user?.rol === 'Paciente' || user?.rol === 'Medico' || user?.rol === 'Administrador') && (
+                            <button
+                              onClick={() => handleCancelar(idCita)}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Cancelar"
+                            >
+                              <X className="w-5 h-5" />
+                            </button>
+                          )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             ) : (
               <tr>
                 <td colSpan="6" className="px-4 py-8 text-center text-gray-500">
@@ -262,43 +364,45 @@ const Citas = () => {
               Nueva Cita
             </h2>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Paciente
-                </label>
-                <select
-                  value={formData.id_paciente}
-                  onChange={(e) =>
-                    setFormData({ ...formData, id_paciente: e.target.value })
-                  }
-                  className="input"
-                  required
-                >
-                  <option value="">Selecciona un paciente</option>
-                  {pacientes.map((paciente) => (
-                    <option key={paciente.id_paciente} value={paciente.id_paciente}>
-                      {paciente.nombre || `Paciente #${paciente.id_paciente}`}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {user?.rol === 'Administrador' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Paciente
+                  </label>
+                  <select
+                    value={formData.id_usuario_paciente}
+                    onChange={(e) =>
+                      setFormData({ ...formData, id_usuario_paciente: e.target.value })
+                    }
+                    className="input"
+                    required
+                  >
+                    <option value="">Selecciona un paciente</option>
+                    {pacientes.map((paciente) => (
+                      <option key={paciente.id_paciente} value={paciente.id_usuario?.id_usuario || paciente.id_usuario}>
+                        {paciente.id_usuario?.nombre || `Paciente #${paciente.id_paciente}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Médico
                 </label>
                 <select
-                  value={formData.id_medico}
+                  value={formData.id_usuario_medico}
                   onChange={(e) =>
-                    setFormData({ ...formData, id_medico: e.target.value })
+                    setFormData({ ...formData, id_usuario_medico: e.target.value })
                   }
                   className="input"
                   required
                 >
                   <option value="">Selecciona un médico</option>
                   {medicos.map((medico) => (
-                    <option key={medico.id_medico} value={medico.id_medico}>
-                      {medico.nombre || `Médico #${medico.id_medico}`}
+                    <option key={medico.id_medico} value={medico.id_usuario?.id_usuario || medico.id_usuario}>
+                      {medico.id_usuario?.nombre || `Médico #${medico.id_medico}`}
                     </option>
                   ))}
                 </select>
@@ -306,45 +410,33 @@ const Citas = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Fecha
+                  ID de Agenda
                 </label>
                 <input
-                  type="date"
-                  value={formData.fecha}
+                  type="number"
+                  value={formData.id_agenda}
                   onChange={(e) =>
-                    setFormData({ ...formData, fecha: e.target.value })
+                    setFormData({ ...formData, id_agenda: e.target.value })
                   }
                   className="input"
                   required
+                  placeholder="ID del bloque de agenda"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Hora
-                </label>
-                <input
-                  type="time"
-                  value={formData.hora}
-                  onChange={(e) =>
-                    setFormData({ ...formData, hora: e.target.value })
-                  }
-                  className="input"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Motivo
+                  Motivo de Consulta
                 </label>
                 <textarea
-                  value={formData.motivo}
+                  value={formData.motivo_consulta}
                   onChange={(e) =>
-                    setFormData({ ...formData, motivo: e.target.value })
+                    setFormData({ ...formData, motivo_consulta: e.target.value })
                   }
                   className="input"
                   rows="3"
+                  required
+                  placeholder="Describe el motivo de la consulta"
                 ></textarea>
               </div>
 

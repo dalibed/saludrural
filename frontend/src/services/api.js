@@ -113,18 +113,8 @@ export const pacienteService = {
     return response.data;
   },
 
-  create: async (data) => {
-    const response = await api.post('/pacientes/', data);
-    return response.data;
-  },
-
   update: async (id, data) => {
     const response = await api.put(`/pacientes/${id}/`, data);
-    return response.data;
-  },
-
-  delete: async (id) => {
-    const response = await api.delete(`/pacientes/${id}/`);
     return response.data;
   },
 };
@@ -145,6 +135,11 @@ export const medicoService = {
     const response = await api.get(`/medicos/listar-estado/${estado}/`);
     return response.data;
   },
+
+  getApproved: async () => {
+    const response = await api.get('/medicos/listar-estado/Aprobado/');
+    return response.data;
+  },
 };
 
 // Servicios de citas
@@ -157,13 +152,13 @@ export const citaService = {
     return response.data;
   },
 
-  cancelar: async (id) => {
-    const response = await api.put(`/citas/cancelar/${id}/`);
+  cancelar: async (id, data) => {
+    const response = await api.put(`/citas/cancelar/${id}/`, data);
     return response.data;
   },
 
-  completar: async (id) => {
-    const response = await api.put(`/citas/completar/${id}/`);
+  completar: async (id, data) => {
+    const response = await api.put(`/citas/completar/${id}/`, data);
     return response.data;
   },
 
@@ -182,25 +177,173 @@ export const citaService = {
 
 // Servicios de agenda
 export const agendaService = {
-  getAll: async () => {
-    const response = await api.get('/agenda/');
-    return response.data;
-  },
-
-  getById: async (id) => {
-    const response = await api.get(`/agenda/${id}/`);
-    return response.data;
-  },
-
   create: async (data) => {
     const response = await api.post('/agenda/', data);
     return response.data;
   },
 
-  getDisponibles: async (fecha, medicoId) => {
-    const response = await api.get('/agenda/', {
-      params: { fecha, medico_id: medicoId, disponible: true },
+  getByMedico: async (medicoUsuarioId) => {
+    const response = await api.get(`/agenda/${medicoUsuarioId}/`);
+    return response.data;
+  },
+
+  getDisponiblesByMedico: async (medicoUsuarioId) => {
+    const response = await api.get(`/agenda/disponible/${medicoUsuarioId}/`);
+    return response.data;
+  },
+
+  toggle: async (agendaId, data) => {
+    const response = await api.put(`/agenda/toggle/${agendaId}/`, data);
+    return response.data;
+  },
+};
+
+export const usuarioService = {
+  create: async (data) => {
+    const response = await api.post('/usuarios/', data);
+    return response.data;
+  },
+
+  update: async (id, data) => {
+    const response = await api.put(`/usuarios/${id}/`, data);
+    return response.data;
+  },
+};
+
+export const diccionarioService = {
+  list: async () => {
+    const response = await api.get('/diccionario/');
+    return response.data;
+  },
+
+  search: async (query) => {
+    const response = await api.get('/diccionario/buscar/', {
+      params: { q: query },
     });
+    return response.data;
+  },
+
+  getById: async (id) => {
+    const response = await api.get(`/diccionario/${id}/`);
+    return response.data;
+  },
+};
+
+export const especialidadService = {
+  list: async () => {
+    const response = await api.get('/especialidades/');
+    return response.data;
+  },
+
+  listByMedico: async (medicoUsuarioId) => {
+    const response = await api.get(`/especialidades/medico/${medicoUsuarioId}/`);
+    return response.data;
+  },
+
+  create: async (data) => {
+    const response = await api.post('/especialidades/', data);
+    return response.data;
+  },
+
+  assignToMedico: async (data) => {
+    const response = await api.post('/especialidades/asignar/', data);
+    return response.data;
+  },
+};
+
+export const tipoDocumentoService = {
+  list: async () => {
+    const response = await api.get('/tipodocumento/');
+    return response.data;
+  },
+
+  create: async (data) => {
+    const response = await api.post('/tipodocumento/', data);
+    return response.data;
+  },
+};
+
+export const historiaClinicaService = {
+  getHistoriaPaciente: async (usuarioPacienteId) => {
+    const response = await api.get(`/historia/paciente/${usuarioPacienteId}/`);
+    return response.data;
+  },
+
+  actualizarAntecedentes: async (medicoId, pacienteId, antecedentes) => {
+    const response = await api.put(
+      `/historia/antecedentes/${medicoId}/${pacienteId}/`,
+      { antecedentes }
+    );
+    return response.data;
+  },
+
+  getHistoriaCompleta: async (medicoId, pacienteId) => {
+    const response = await api.get(`/historia/completa/${medicoId}/${pacienteId}/`);
+    return response.data;
+  },
+};
+
+export const historiaEntradaService = {
+  listByPaciente: async (usuarioPacienteId) => {
+    const response = await api.get(`/historia/entrada/paciente/${usuarioPacienteId}/`);
+    return response.data;
+  },
+
+  listByMedico: async (usuarioMedicoId) => {
+    const response = await api.get(`/historia/entrada/medico/${usuarioMedicoId}/`);
+    return response.data;
+  },
+
+  create: async (data) => {
+    const response = await api.post('/historia-entradas/', data);
+    return response.data;
+  },
+
+  update: async (id, data) => {
+    const response = await api.put(`/historia-entradas/${id}/`, data);
+    return response.data;
+  },
+};
+
+export const documentoService = {
+  listByMedico: async (medicoUsuarioId) => {
+    const response = await api.get('/documentos/', {
+      params: { id_usuario_medico: medicoUsuarioId },
+    });
+    return response.data;
+  },
+
+  upload: async (data) => {
+    const response = await api.post('/documentos/', data);
+    return response.data;
+  },
+
+  validate: async (idDocumento, data) => {
+    const response = await api.post(`/documentos/${idDocumento}/validar/`, data);
+    return response.data;
+  },
+};
+
+export const notificacionService = {
+  listPaciente: async (usuarioPacienteId) => {
+    const response = await api.get(`/notificaciones/paciente/${usuarioPacienteId}/`);
+    return response.data;
+  },
+
+  listMedico: async (usuarioMedicoId) => {
+    const response = await api.get(`/notificaciones/medico/${usuarioMedicoId}/`);
+    return response.data;
+  },
+};
+
+export const videollamadaService = {
+  crear: async (citaId, data) => {
+    const response = await api.post(`/videollamada/${citaId}/`, data);
+    return response.data;
+  },
+
+  getByCita: async (citaId) => {
+    const response = await api.get(`/videollamada/${citaId}/`);
     return response.data;
   },
 };

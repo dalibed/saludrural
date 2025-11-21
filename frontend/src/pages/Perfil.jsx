@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { authService } from '../services/api';
-import { User, Mail, Phone, Calendar, Lock, Save } from 'lucide-react';
+import { authService, pacienteService, usuarioService, documentoService, tipoDocumentoService } from '../services/api';
+import { User, Mail, Phone, Calendar, Lock, Save, ShieldCheck, UploadCloud } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 const Perfil = () => {
-  const { user } = useAuth();
+  const { user, checkAuth } = useAuth();
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [passwordData, setPasswordData] = useState({
     old_password: '',
@@ -14,6 +14,62 @@ const Perfil = () => {
     confirm_password: '',
   });
   const [message, setMessage] = useState({ type: '', text: '' });
+  const [pacientePerfil, setPacientePerfil] = useState(null);
+  const [profileMessage, setProfileMessage] = useState('');
+  const [usuarioForm, setUsuarioForm] = useState({
+    nombre: user?.nombre || '',
+    apellidos: user?.apellidos || '',
+    correo: user?.correo || '',
+    telefono: user?.telefono || '',
+  });
+  const [userMessage, setUserMessage] = useState('');
+  const [docForm, setDocForm] = useState({
+    id_tipo_documento: '',
+    archivo: '',
+  });
+  const [docTypes, setDocTypes] = useState([]);
+  const [documentos, setDocumentos] = useState([]);
+  const [docMessage, setDocMessage] = useState('');
+
+  useEffect(() => {
+    setUsuarioForm({
+      nombre: user?.nombre || '',
+      apellidos: user?.apellidos || '',
+      correo: user?.correo || '',
+      telefono: user?.telefono || '',
+    });
+
+    const loadPacienteData = async () => {
+      if (user?.rol !== 'Paciente') return;
+      try {
+        const data = await pacienteService.getById(user.id_usuario);
+        setPacientePerfil({
+          grupo_sanguineo: data?.grupo_sanguineo || '',
+          seguro_medico: data?.seguro_medico || '',
+          contacto_emergencia: data?.contacto_emergencia || '',
+          telefono_emergencia: data?.telefono_emergencia || '',
+        });
+      } catch (error) {
+        console.error('Error al cargar perfil de paciente', error);
+      }
+    };
+    const loadMedicoDocs = async () => {
+      if (user?.rol !== 'Medico') return;
+      try {
+        const [types, docs] = await Promise.all([
+          tipoDocumentoService.list().catch(() => []),
+          documentoService.listByMedico(user.id_usuario).catch(() => []),
+        ]);
+        setDocTypes(Array.isArray(types) ? types : []);
+        setDocumentos(Array.isArray(docs) ? docs : []);
+      } catch (error) {
+        console.error('Error al cargar documentos de médico', error);
+      }
+    };
+
+    loadPacienteData();
+    loadMedicoDocs();
+  }, [user]);
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
@@ -56,6 +112,62 @@ const Perfil = () => {
           error.response?.data?.detail ||
           'Error al cambiar la contraseña. Verifica tu contraseña actual.',
       });
+    }
+  };
+
+  const handleUpdatePaciente = async (e) => {
+    e.preventDefault();
+    if (!user || user.rol !== 'Paciente' || !pacientePerfil) return;
+
+    try {
+      await pacienteService.update(user.id_usuario, pacientePerfil);
+      setProfileMessage('Información clínica actualizada correctamente.');
+    } catch (error) {
+      console.error('Error al actualizar perfil de paciente', error);
+      setProfileMessage(
+        error.response?.data?.detail || 'No pudimos guardar los cambios. Intenta nuevamente.'
+      );
+    }
+  };
+
+  const handleUpdateUsuario = async (e) => {
+    e.preventDefault();
+    if (!user) return;
+    try {
+      await usuarioService.update(user.id_usuario, usuarioForm);
+      setUserMessage('Datos personales actualizados.');
+      await checkAuth();
+    } catch (error) {
+      console.error('Error al actualizar usuario', error);
+      setUserMessage(error.response?.data?.detail || 'No pudimos actualizar tus datos.');
+    }
+  };
+
+  const handleFileChange = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setDocForm((prev) => ({ ...prev, archivo: reader.result }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleUploadDocumento = async (e) => {
+    e.preventDefault();
+    if (!docForm.id_tipo_documento || !docForm.archivo) return;
+    try {
+      await documentoService.upload({
+        id_usuario_medico: user.id_usuario,
+        id_tipo_documento: Number(docForm.id_tipo_documento),
+        archivo: docForm.archivo,
+      });
+      setDocMessage('Documento enviado para validación.');
+      setDocForm({ id_tipo_documento: '', archivo: '' });
+      const docs = await documentoService.listByMedico(user.id_usuario);
+      setDocumentos(Array.isArray(docs) ? docs : []);
+    } catch (error) {
+      console.error('Error al subir documento', error);
+      setDocMessage(error.response?.data?.detail || 'No pudimos subir el documento.');
     }
   };
 
@@ -127,6 +239,215 @@ const Perfil = () => {
           </div>
         </div>
       </div>
+
+      <div className="card">
+        <h2 className="text-xl font-bold text-gray-900 mb-4">Editar datos personales</h2>
+        {userMessage && (
+          <div className="mb-4 text-sm text-primary-700 bg-primary-50 rounded-xl px-4 py-2">
+            {userMessage}
+          </div>
+        )}
+        <form className="grid grid-cols-1 md:grid-cols-2 gap-4" onSubmit={handleUpdateUsuario}>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Nombre</label>
+            <input
+              className="input"
+              value={usuarioForm.nombre}
+              onChange={(e) => setUsuarioForm((prev) => ({ ...prev, nombre: e.target.value }))}
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Apellidos</label>
+            <input
+              className="input"
+              value={usuarioForm.apellidos}
+              onChange={(e) => setUsuarioForm((prev) => ({ ...prev, apellidos: e.target.value }))}
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Correo</label>
+            <input
+              type="email"
+              className="input"
+              value={usuarioForm.correo}
+              onChange={(e) => setUsuarioForm((prev) => ({ ...prev, correo: e.target.value }))}
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Teléfono</label>
+            <input
+              className="input"
+              value={usuarioForm.telefono}
+              onChange={(e) => setUsuarioForm((prev) => ({ ...prev, telefono: e.target.value }))}
+            />
+          </div>
+          <div className="md:col-span-2 flex justify-end">
+            <button type="submit" className="btn btn-primary">
+              Guardar datos
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {user?.rol === 'Paciente' && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-gray-900">Datos clínicos</h2>
+            <ShieldCheck className="w-5 h-5 text-primary-600" />
+          </div>
+          <form className="grid grid-cols-1 md:grid-cols-2 gap-4" onSubmit={handleUpdatePaciente}>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Grupo sanguíneo
+              </label>
+              <input
+                type="text"
+                value={pacientePerfil?.grupo_sanguineo || ''}
+                onChange={(e) =>
+                  setPacientePerfil((prev) => ({ ...prev, grupo_sanguineo: e.target.value }))
+                }
+                className="input"
+                placeholder="O+, A-, etc."
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Seguro médico
+              </label>
+              <input
+                type="text"
+                value={pacientePerfil?.seguro_medico || ''}
+                onChange={(e) =>
+                  setPacientePerfil((prev) => ({ ...prev, seguro_medico: e.target.value }))
+                }
+                className="input"
+                placeholder="Nombre de la EPS"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Contacto de emergencia
+              </label>
+              <input
+                type="text"
+                value={pacientePerfil?.contacto_emergencia || ''}
+                onChange={(e) =>
+                  setPacientePerfil((prev) => ({
+                    ...prev,
+                    contacto_emergencia: e.target.value,
+                  }))
+                }
+                className="input"
+                placeholder="Nombre completo"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Teléfono de emergencia
+              </label>
+              <input
+                type="text"
+                value={pacientePerfil?.telefono_emergencia || ''}
+                onChange={(e) =>
+                  setPacientePerfil((prev) => ({
+                    ...prev,
+                    telefono_emergencia: e.target.value,
+                  }))
+                }
+                className="input"
+                placeholder="+57 300 000 0000"
+              />
+            </div>
+            {profileMessage && (
+              <div className="col-span-full text-sm text-primary-600 bg-primary-50 rounded-xl px-4 py-2">
+                {profileMessage}
+              </div>
+            )}
+            <div className="col-span-full flex justify-end">
+              <button type="submit" className="btn btn-primary" disabled={!pacientePerfil}>
+                Guardar cambios
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {user?.rol === 'Medico' && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-gray-900">Documentos para validación</h2>
+          </div>
+          {docMessage && (
+            <div className="mb-4 text-sm text-primary-700 bg-primary-50 rounded-xl px-4 py-2">
+              {docMessage}
+            </div>
+          )}
+          <form className="grid grid-cols-1 md:grid-cols-3 gap-4" onSubmit={handleUploadDocumento}>
+            <div className="md:col-span-1">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de documento</label>
+              <select
+                className="input"
+                value={docForm.id_tipo_documento}
+                onChange={(e) => setDocForm((prev) => ({ ...prev, id_tipo_documento: e.target.value }))}
+                required
+              >
+                <option value="">Selecciona un tipo</option>
+                {docTypes.map((tipo) => (
+                  <option key={tipo.ID_TipoDocumento || tipo.id_tipo_documento} value={tipo.ID_TipoDocumento || tipo.id_tipo_documento}>
+                    {tipo.Nombre || tipo.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Archivo (PDF o imagen)</label>
+              <input
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png"
+                className="input"
+                onChange={(e) => handleFileChange(e.target.files?.[0])}
+                required
+              />
+            </div>
+            <div className="md:col-span-3 flex justify-end">
+              <button type="submit" className="btn btn-primary flex items-center space-x-2">
+                <UploadCloud className="w-4 h-4" />
+                <span>Subir documento</span>
+              </button>
+            </div>
+          </form>
+
+          <div className="mt-6">
+            <h3 className="text-lg font-semibold text-dark-700 mb-2">Historial de documentos</h3>
+            {documentos.length === 0 ? (
+              <p className="text-sm text-dark-400">Aún no has subido documentos.</p>
+            ) : (
+              <div className="space-y-3">
+                {documentos.map((doc) => (
+                  <div
+                    key={doc.id_documento}
+                    className="border border-gray-100 rounded-2xl p-4 flex flex-col md:flex-row md:items-center md:justify-between"
+                  >
+                    <div>
+                      <p className="font-semibold text-dark-700">{doc.tipo_documento}</p>
+                      <p className="text-xs text-dark-400">{doc.archivo}</p>
+                      <p className="text-xs text-dark-500 mt-1">
+                        Estado: <strong>{doc.estado}</strong>
+                      </p>
+                    </div>
+                    <p className="text-xs text-dark-400 mt-2 md:mt-0">
+                      Subido el {doc.fecha_subida ? format(new Date(doc.fecha_subida), 'dd MMM yyyy', { locale: es }) : 'N/A'}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Cambiar Contraseña */}
       <div className="card">
