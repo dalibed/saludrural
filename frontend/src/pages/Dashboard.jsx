@@ -24,17 +24,70 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadDashboardData();
-  }, []);
+    if (user) {
+      loadDashboardData();
+    }
+  }, [user]);
 
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      const [citas, pacientes, medicos] = await Promise.all([
-        citaService.getAll(),
-        pacienteService.getAll(),
-        medicoService.getAll(),
-      ]);
+      
+      // Cargar datos según el rol del usuario
+      const promises = [];
+      let citas = [];
+      let pacientes = 0;
+      let medicos = 0;
+      
+      // Obtener citas según el rol
+      if (user?.rol === 'Paciente') {
+        promises.push(
+          citaService.getByPaciente(user.id_usuario).catch(err => {
+            console.warn('Error al cargar citas del paciente:', err);
+            return [];
+          })
+        );
+      } else if (user?.rol === 'Medico') {
+        promises.push(
+          citaService.getByMedico(user.id_usuario).catch(err => {
+            console.warn('Error al cargar citas del médico:', err);
+            return [];
+          })
+        );
+      } else {
+        // Admin - intentar obtener todas (puede no estar disponible)
+        promises.push(
+          citaService.getAll().catch(err => {
+            console.warn('Error al cargar todas las citas:', err);
+            return [];
+          })
+        );
+      }
+      
+      // Obtener pacientes (solo admin)
+      if (user?.rol === 'Administrador') {
+        promises.push(
+          pacienteService.getAll().then(data => Array.isArray(data) ? data : []).catch(err => {
+            console.warn('Error al cargar pacientes (solo admin):', err);
+            return [];
+          })
+        );
+      } else {
+        promises.push(Promise.resolve([]));
+      }
+      
+      // Obtener médicos
+      promises.push(
+        medicoService.getAll().then(data => Array.isArray(data) ? data : []).catch(err => {
+          console.warn('Error al cargar médicos:', err);
+          return [];
+        })
+      );
+      
+      const results = await Promise.all(promises);
+      citas = Array.isArray(results[0]) ? results[0] : [];
+      const pacientesData = Array.isArray(results[1]) ? results[1] : [];
+      const medicosData = Array.isArray(results[2]) ? results[2] : [];
 
       const hoy = new Date().toISOString().split('T')[0];
       const citasHoy = citas.filter((cita) => cita.fecha === hoy);
@@ -44,15 +97,29 @@ const Dashboard = () => {
 
       // Obtener próximas citas (próximas 5)
       const proximas = citas
-        .filter((cita) => new Date(cita.fecha) >= new Date())
-        .sort((a, b) => new Date(a.fecha) - new Date(b.fecha))
+        .filter((cita) => {
+          if (!cita.fecha) return false;
+          try {
+            const citaFecha = new Date(cita.fecha);
+            return citaFecha >= new Date();
+          } catch {
+            return false;
+          }
+        })
+        .sort((a, b) => {
+          try {
+            return new Date(a.fecha) - new Date(b.fecha);
+          } catch {
+            return 0;
+          }
+        })
         .slice(0, 5);
 
       setStats({
         citasHoy: citasHoy.length,
         citasPendientes: citasPendientes.length,
-        pacientes: pacientes.length,
-        medicos: medicos.length,
+        pacientes: pacientesData.length,
+        medicos: medicosData.length,
       });
 
       setProximasCitas(proximas);

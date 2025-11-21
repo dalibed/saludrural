@@ -8,7 +8,7 @@ const Login = () => {
   const [contrasena, setContrasena] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, isAuthenticated } = useAuth();
+  const { login: loginUser, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
   // Si ya está autenticado, redirigir al dashboard
@@ -25,7 +25,7 @@ const Login = () => {
 
     try {
       console.log('Iniciando login...');
-      const result = await login(correo, contrasena);
+      const result = await loginUser(correo, contrasena);
       console.log('Resultado del login:', result);
       
       if (result.success) {

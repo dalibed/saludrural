@@ -23,9 +23,21 @@ const Pacientes = () => {
     try {
       setLoading(true);
       const data = await pacienteService.getAll();
-      setPacientes(data);
+      
+      // Asegurar que data es un array
+      if (Array.isArray(data)) {
+        setPacientes(data);
+      } else {
+        console.warn('Respuesta inesperada de pacientes:', data);
+        setPacientes([]);
+      }
     } catch (error) {
       console.error('Error al cargar pacientes:', error);
+      // Si es error 403, mostrar mensaje apropiado
+      if (error.response?.status === 403) {
+        console.warn('No tienes permisos para ver todos los pacientes. Solo administradores pueden ver la lista completa.');
+      }
+      setPacientes([]);
     } finally {
       setLoading(false);
     }

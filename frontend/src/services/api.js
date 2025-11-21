@@ -149,23 +149,11 @@ export const medicoService = {
 
 // Servicios de citas
 export const citaService = {
-  getAll: async () => {
-    const response = await api.get('/citas/');
-    return response.data;
-  },
-
-  getById: async (id) => {
-    const response = await api.get(`/citas/${id}/`);
-    return response.data;
-  },
-
+  // Nota: No hay un endpoint 'list()' genérico en el backend
+  // Usar getByPaciente o getByMedico según el rol del usuario
+  
   create: async (data) => {
     const response = await api.post('/citas/', data);
-    return response.data;
-  },
-
-  update: async (id, data) => {
-    const response = await api.put(`/citas/${id}/`, data);
     return response.data;
   },
 
@@ -181,12 +169,14 @@ export const citaService = {
 
   getByPaciente: async (pacienteId) => {
     const response = await api.get(`/citas/paciente/${pacienteId}/`);
-    return response.data;
+    // Asegurar que siempre devuelve un array
+    return Array.isArray(response.data) ? response.data : [];
   },
 
   getByMedico: async (medicoId) => {
     const response = await api.get(`/citas/medico/${medicoId}/`);
-    return response.data;
+    // Asegurar que siempre devuelve un array
+    return Array.isArray(response.data) ? response.data : [];
   },
 };
 

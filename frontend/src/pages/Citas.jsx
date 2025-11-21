@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 import { citaService, pacienteService, medicoService, agendaService } from '../services/api';
 import { Calendar, Plus, X, CheckCircle, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 const Citas = () => {
+  const { user } = useAuth();
   const [citas, setCitas] = useState([]);
   const [pacientes, setPacientes] = useState([]);
   const [medicos, setMedicos] = useState([]);
@@ -20,21 +22,52 @@ const Citas = () => {
   });
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (user) {
+      loadData();
+    }
+  }, [user]);
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const [citasData, pacientesData, medicosData] = await Promise.all([
-        citaService.getAll(),
-        pacienteService.getAll(),
-        medicoService.getAll(),
+      
+      // Cargar citas según el rol del usuario
+      let citasData = [];
+      
+      if (user?.rol === 'Paciente' && user?.id_usuario) {
+        try {
+          citasData = await citaService.getByPaciente(user.id_usuario);
+        } catch (err) {
+          console.warn('Error al cargar citas del paciente:', err);
+          citasData = [];
+        }
+      } else if (user?.rol === 'Medico' && user?.id_usuario) {
+        try {
+          citasData = await citaService.getByMedico(user.id_usuario);
+        } catch (err) {
+          console.warn('Error al cargar citas del médico:', err);
+          citasData = [];
+        }
+      } else {
+        // Administrador o usuario sin rol específico - no hay endpoint para todas las citas
+        citasData = [];
+      }
+      
+      // Cargar pacientes y médicos (solo para crear citas, requiere permisos específicos)
+      const [pacientesData, medicosData] = await Promise.all([
+        pacienteService.getAll().catch(err => {
+          console.warn('Error al cargar pacientes (puede requerir permisos de admin):', err);
+          return [];
+        }),
+        medicoService.getAll().catch(err => {
+          console.warn('Error al cargar médicos:', err);
+          return [];
+        }),
       ]);
 
-      setCitas(citasData);
-      setPacientes(pacientesData);
-      setMedicos(medicosData);
+      setCitas(Array.isArray(citasData) ? citasData : []);
+      setPacientes(Array.isArray(pacientesData) ? pacientesData : []);
+      setMedicos(Array.isArray(medicosData) ? medicosData : []);
     } catch (error) {
       console.error('Error al cargar datos:', error);
     } finally {
