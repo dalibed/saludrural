@@ -14,10 +14,9 @@ from django.db import DatabaseError
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
 
 # Importar permisos personalizados
-from backend.permissions import IsMedico, IsAdministrador
+from backend.permissions import IsMedico, IsAdministrador, IsAuthenticated
 
 from .serializers import (
     DocumentoUploadSerializer,
@@ -110,7 +109,7 @@ class DocumentoViewSet(viewsets.ViewSet):
                 medico = Medico.objects.get(id_usuario=request.user.id_usuario)
                 
                 # Verificar que esté consultando sus propios documentos
-                if medico.id_usuario.id_usuario != id_usuario_medico:
+                if medico.id_usuario != id_usuario_medico:
                     return Response(
                         {
                             "detail": "No tienes permiso para ver los documentos de otros médicos.",
@@ -189,8 +188,21 @@ class DocumentoViewSet(viewsets.ViewSet):
             403: No es el médico correcto o está desactivado
             404: Usuario no es médico o tipo no existe
         """
+        # Log para depuración
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Datos recibidos en create: {request.data}")
+        logger.info(f"Usuario autenticado: {request.user}")
+        
         serializer = DocumentoUploadSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        if not serializer.is_valid():
+            return Response(
+                {
+                    "detail": "Datos inválidos",
+                    "errors": serializer.errors
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         id_usuario_medico = serializer.validated_data["id_usuario_medico"]
         id_tipo_documento = serializer.validated_data["id_tipo_documento"]

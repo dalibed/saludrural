@@ -30,6 +30,7 @@ const Perfil = () => {
   const [docTypes, setDocTypes] = useState([]);
   const [documentos, setDocumentos] = useState([]);
   const [docMessage, setDocMessage] = useState('');
+  const [selectedFile, setSelectedFile] = useState(null);
 
   useEffect(() => {
     setUsuarioForm({
@@ -145,29 +146,86 @@ const Perfil = () => {
 
   const handleFileChange = (file) => {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setDocForm((prev) => ({ ...prev, archivo: reader.result }));
-    };
-    reader.readAsDataURL(file);
+    setSelectedFile(file);
+    // Solo guardamos el nombre del archivo, no el contenido
+    setDocForm((prev) => ({ ...prev, archivo: file.name }));
   };
 
   const handleUploadDocumento = async (e) => {
     e.preventDefault();
-    if (!docForm.id_tipo_documento || !docForm.archivo) return;
+    if (!docForm.id_tipo_documento || !docForm.archivo || !selectedFile) {
+      setDocMessage('Por favor, selecciona un tipo de documento y un archivo.');
+      return;
+    }
+
+    // Validar que el usuario esté autenticado
+    if (!user || !user.id_usuario) {
+      setDocMessage('Error: No estás autenticado. Por favor, inicia sesión nuevamente.');
+      return;
+    }
+
+    // Verificar que el token esté presente
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+      setDocMessage('Error: No se encontró el token de autenticación. Por favor, inicia sesión nuevamente.');
+      return;
+    }
+
+    // Validar que id_tipo_documento sea un número válido
+    const idTipoDoc = Number(docForm.id_tipo_documento);
+    if (isNaN(idTipoDoc) || idTipoDoc <= 0) {
+      setDocMessage('Error: Por favor, selecciona un tipo de documento válido.');
+      return;
+    }
+
+    // Validar que el nombre del archivo no esté vacío
+    if (!docForm.archivo || docForm.archivo.trim() === '') {
+      setDocMessage('Error: El nombre del archivo no puede estar vacío.');
+      return;
+    }
+
+    // Preparar los datos a enviar
+    const datosEnvio = {
+      id_usuario_medico: user.id_usuario,
+      id_tipo_documento: idTipoDoc,
+      archivo: docForm.archivo.trim(), // Solo el nombre del archivo
+    };
+
+    console.log('Enviando datos:', datosEnvio);
+
     try {
-      await documentoService.upload({
-        id_usuario_medico: user.id_usuario,
-        id_tipo_documento: Number(docForm.id_tipo_documento),
-        archivo: docForm.archivo,
-      });
+      await documentoService.upload(datosEnvio);
       setDocMessage('Documento enviado para validación.');
       setDocForm({ id_tipo_documento: '', archivo: '' });
+      setSelectedFile(null);
       const docs = await documentoService.listByMedico(user.id_usuario);
       setDocumentos(Array.isArray(docs) ? docs : []);
     } catch (error) {
       console.error('Error al subir documento', error);
-      setDocMessage(error.response?.data?.detail || 'No pudimos subir el documento.');
+      console.error('Error response:', error.response);
+      console.error('Error data:', error.response?.data);
+      
+      // Manejar diferentes tipos de errores
+      if (error.response?.status === 401) {
+        setDocMessage('Error de autenticación. Por favor, inicia sesión nuevamente.');
+        // Opcional: redirigir al login
+        // window.location.href = '/login';
+      } else if (error.response?.status === 403) {
+        setDocMessage(error.response?.data?.detail || 'No tienes permiso para realizar esta acción.');
+      } else if (error.response?.status === 400) {
+        // Mostrar errores específicos del serializer si están disponibles
+        const errors = error.response?.data?.errors;
+        if (errors) {
+          const errorMessages = Object.entries(errors)
+            .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
+            .join('; ');
+          setDocMessage(`Datos inválidos: ${errorMessages}`);
+        } else {
+          setDocMessage(error.response?.data?.detail || 'Datos inválidos. Verifica la información ingresada.');
+        }
+      } else {
+        setDocMessage(error.response?.data?.detail || 'No pudimos subir el documento. Intenta nuevamente.');
+      }
     }
   };
 
@@ -411,6 +469,9 @@ const Perfil = () => {
                 onChange={(e) => handleFileChange(e.target.files?.[0])}
                 required
               />
+              {selectedFile && (
+                <p className="text-sm text-gray-500 mt-1">Archivo seleccionado: {selectedFile.name}</p>
+              )}
             </div>
             <div className="md:col-span-3 flex justify-end">
               <button type="submit" className="btn btn-primary flex items-center space-x-2">

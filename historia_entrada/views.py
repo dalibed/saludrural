@@ -119,7 +119,7 @@ class HistoriaEntradaViewSet(viewsets.ViewSet):
             medico = Medico.objects.get(id_usuario=request.user.id_usuario)
             
             # Verificar que el médico esté usando su propio ID
-            if medico.id_usuario.id_usuario != id_usuario_medico:
+            if medico.id_usuario != id_usuario_medico:
                 return Response(
                     {
                         "detail": "Solo puedes crear entradas con tu propio ID de médico.",
@@ -450,7 +450,7 @@ class HistoriaEntradaViewSet(viewsets.ViewSet):
                 paciente = Paciente.objects.get(id_usuario=request.user.id_usuario)
                 
                 # Verificar que esté consultando sus propias entradas
-                if paciente.id_usuario.id_usuario != id_usuario_paciente:
+                if paciente.id_usuario != id_usuario_paciente:
                     return Response(
                         {
                             "detail": "No tienes permiso para ver las entradas de otros pacientes.",

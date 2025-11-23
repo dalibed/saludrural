@@ -64,3 +64,16 @@ def sp_cita_completar(id_usuario_medico, id_cita):
             return row[0] if row else "Cita completada"
         except DatabaseError as e:
             raise e
+
+
+def sp_cita_aceptar(id_usuario_medico, id_cita):
+    with connection.cursor() as cursor:
+        try:
+            cursor.callproc("sp_cita_aceptar", [
+                id_usuario_medico,
+                id_cita
+            ])
+            row = cursor.fetchone()
+            return row[0] if row else "Cita aceptada correctamente"
+        except DatabaseError as e:
+            raise e

@@ -23,7 +23,13 @@ const BookAppointmentModal = ({ doctor, onClose, onSuccess }) => {
       try {
         setLoadingSlots(true);
         const data = await agendaService.getDisponiblesByMedico(medicoUsuarioId);
-        setSlots(Array.isArray(data) ? data : []);
+        // El endpoint getDisponiblesByMedico ya devuelve solo los slots disponibles
+        // No necesitamos filtrar adicionalmente, solo asegurarnos de que sea un array
+        const slotsDisponibles = Array.isArray(data) ? data : [];
+        
+        console.log('Slots disponibles recibidos del backend:', slotsDisponibles.length);
+        console.log('Datos recibidos:', data);
+        setSlots(slotsDisponibles);
       } catch (error) {
         console.error('Error al cargar disponibilidad', error);
         setStatus({
@@ -59,12 +65,30 @@ const BookAppointmentModal = ({ doctor, onClose, onSuccess }) => {
       onSuccess?.();
     } catch (error) {
       console.error('Error al agendar cita', error);
-      setStatus({
-        type: 'error',
-        message:
-          error.response?.data?.detail ||
-          'No se pudo agendar la cita. Verifica la información e inténtalo nuevamente.',
-      });
+      const errorMessage = error.response?.data?.detail || 'No se pudo agendar la cita. Verifica la información e inténtalo nuevamente.';
+      
+      // Si el horario ya no está disponible, recargar los slots disponibles
+      if (errorMessage.includes('ya no está disponible') || errorMessage.includes('no está disponible')) {
+        setStatus({
+          type: 'error',
+          message: 'Este horario ya no está disponible. Por favor, selecciona otro horario.',
+        });
+        setSelectedSlot(null);
+        // Recargar slots disponibles
+        try {
+          const data = await agendaService.getDisponiblesByMedico(medicoUsuarioId);
+          // El endpoint ya devuelve solo los disponibles
+          const slotsDisponibles = Array.isArray(data) ? data : [];
+          setSlots(slotsDisponibles);
+        } catch (reloadError) {
+          console.error('Error al recargar slots', reloadError);
+        }
+      } else {
+        setStatus({
+          type: 'error',
+          message: errorMessage,
+        });
+      }
     }
   };
 

@@ -31,7 +31,8 @@ from .services import (
     sp_cita_cancelar,
     sp_cita_list_paciente,
     sp_cita_list_medico,
-    sp_cita_completar
+    sp_cita_completar,
+    sp_cita_aceptar
 )
 
 
@@ -122,7 +123,7 @@ class CitaViewSet(viewsets.ViewSet):
                 return Response(
                     {
                         "detail": "Solo puedes crear citas para ti mismo.",
-                        "hint": f"Tu ID de usuario es {paciente.id_usuario.id_usuario}"
+                        "hint": f"Tu ID de usuario es {paciente.id_usuario}"
                     },
                     status=status.HTTP_403_FORBIDDEN
                 )
@@ -326,6 +327,132 @@ class CitaViewSet(viewsets.ViewSet):
             status=status.HTTP_200_OK
         )
     
+    @action(detail=True, methods=['put'], url_path='aceptar')
+    def aceptar(self, request, pk=None):
+        """
+        PUT /api/citas/aceptar/:id_cita/
+        
+        Acepta una cita pendiente, cambiándola a estado "Programada".
+        
+        Permiso: Solo el médico asignado a la cita
+        
+        Validaciones:
+        - Solo el médico asignado puede aceptar
+        - La cita debe estar en estado "Pendiente"
+        - No se puede aceptar una cita cancelada o completada
+        
+        Args:
+            pk: ID de la cita a aceptar
+        
+        Request Body:
+            {
+                "id_usuario_medico": 2
+            }
+        
+        Response:
+            200: Cita aceptada
+            400: Cita no está en estado Pendiente o ya fue procesada
+            403: No es el médico asignado
+            404: Cita no existe
+        """
+        id_usuario_medico = request.data.get("id_usuario_medico")
+        
+        if not id_usuario_medico:
+            return Response(
+                {"detail": "Debe enviar id_usuario_medico."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # VALIDACIÓN DE OWNERSHIP: Solo el médico autenticado puede aceptar
+        if request.user.rol == 'Medico':
+            from medicos.models import Medico
+            try:
+                medico = Medico.objects.get(id_usuario=request.user.id_usuario)
+                
+                # id_usuario es un IntegerField, no una ForeignKey, así que es directamente el ID
+                id_usuario_medico_actual = medico.id_usuario
+                
+                # Verificar que el médico esté aceptando su propia cita
+                if int(id_usuario_medico_actual) != int(id_usuario_medico):
+                    return Response(
+                        {
+                            "detail": "Solo puedes aceptar tus propias citas.",
+                            "hint": f"Tu ID de usuario médico es {id_usuario_medico_actual}, pero estás intentando usar {id_usuario_medico}"
+                        },
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+            except Medico.DoesNotExist:
+                return Response(
+                    {"detail": "No estás registrado como médico."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        
+        try:
+            # Aceptar cita mediante stored procedure
+            # El SP valida que el médico sea el asignado a la cita y que esté en estado Pendiente
+            mensaje = sp_cita_aceptar(
+                int(id_usuario_medico),
+                int(pk)
+            )
+            
+        except DatabaseError as e:
+            msg = str(e).lower()
+            
+            if "no está registrado como médico" in msg:
+                return Response(
+                    {"detail": "El usuario no está registrado como médico."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            if "médico está desactivado" in msg:
+                return Response(
+                    {"detail": "El médico está desactivado."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            if "médico no está aprobado" in msg:
+                return Response(
+                    {"detail": "El médico no está aprobado."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            if "cita no existe" in msg:
+                return Response(
+                    {"detail": "La cita no existe."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            if "solo el médico asignado" in msg:
+                return Response(
+                    {
+                        "detail": "Solo el médico asignado puede aceptar la cita.",
+                        "hint": "Esta cita no te pertenece."
+                    },
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            if "no está en estado pendiente" in msg or "ya está programada" in msg:
+                return Response(
+                    {"detail": "La cita no está en estado Pendiente o ya fue procesada."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            if "no se puede aceptar una cita cancelada" in msg or "no se puede aceptar una cita completada" in msg:
+                return Response(
+                    {"detail": "No se puede aceptar una cita que ya fue cancelada o completada."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            return Response(
+                {"detail": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        return Response(
+            {"detail": mensaje},
+            status=status.HTTP_200_OK
+        )
+    
     @action(detail=True, methods=['put'], url_path='completar')
     def completar(self, request, pk=None):
         """
@@ -368,12 +495,15 @@ class CitaViewSet(viewsets.ViewSet):
             try:
                 medico = Medico.objects.get(id_usuario=request.user.id_usuario)
                 
+                # id_usuario es un IntegerField, no una ForeignKey, así que es directamente el ID
+                id_usuario_medico_actual = medico.id_usuario
+                
                 # Verificar que el médico esté completando su propia cita
-                if medico.id_usuario.id_usuario != int(id_usuario_medico):
+                if int(id_usuario_medico_actual) != int(id_usuario_medico):
                     return Response(
                         {
                             "detail": "Solo puedes completar tus propias citas.",
-                            "hint": f"Tu ID de usuario médico es {medico.id_usuario.id_usuario}"
+                            "hint": f"Tu ID de usuario médico es {id_usuario_medico_actual}, pero estás intentando usar {id_usuario_medico}"
                         },
                         status=status.HTTP_403_FORBIDDEN
                     )

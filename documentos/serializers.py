@@ -2,9 +2,9 @@ from rest_framework import serializers
 
 
 class DocumentoUploadSerializer(serializers.Serializer):
-    id_usuario_medico = serializers.IntegerField()
-    id_tipo_documento = serializers.IntegerField()
-    archivo = serializers.CharField(max_length=200)
+    id_usuario_medico = serializers.IntegerField(required=True)
+    id_tipo_documento = serializers.IntegerField(required=True)
+    archivo = serializers.CharField(max_length=200, required=True, allow_blank=False)
 
 
 class DocumentoSerializer(serializers.Serializer):

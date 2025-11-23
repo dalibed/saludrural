@@ -347,11 +347,11 @@ class AgendaViewSet(viewsets.ViewSet):
                 medico = Medico.objects.get(id_usuario=request.user.id_usuario)
                 
                 # Verificar que el médico esté modificando su propia agenda
-                if medico.id_usuario.id_usuario != id_usuario_medico:
+                if medico.id_usuario != id_usuario_medico:
                     return Response(
                         {
                             "detail": "Solo puedes modificar tu propia agenda.",
-                            "hint": f"Tu ID de usuario médico es {medico.id_usuario.id_usuario}"
+                            "hint": f"Tu ID de usuario médico es {medico.id_usuario}"
                         },
                         status=status.HTTP_403_FORBIDDEN
                     )

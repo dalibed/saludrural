@@ -16,6 +16,8 @@ api.interceptors.request.use(
     const token = localStorage.getItem('access_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    } else {
+      console.warn('No se encontró token de acceso en localStorage');
     }
     return config;
   },
@@ -154,6 +156,11 @@ export const citaService = {
 
   cancelar: async (id, data) => {
     const response = await api.put(`/citas/cancelar/${id}/`, data);
+    return response.data;
+  },
+
+  aceptar: async (id, data) => {
+    const response = await api.put(`/citas/aceptar/${id}/`, data);
     return response.data;
   },
 
